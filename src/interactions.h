@@ -97,7 +97,7 @@ thrust::default_random_engine &rng) {
 		pathSegment.color *= m.color;
 	}
 	//pathSegment.color *= glm::abs(glm::dot(rayDirection, normal)); //decay the color
-	pathSegment.ray.origin = intersect;
-	pathSegment.ray.direction = rayDirection + EPSILON * normal;
+	pathSegment.ray.origin = intersect + EPSILON * normal;
+	pathSegment.ray.direction = rayDirection;
 
 }
