@@ -237,7 +237,7 @@ __global__ void shadeMaterial(int iter
 			if (material.emittance > 0.0f){
 				pathSegments[idx].color *= (materialColor * material.emittance);
 				pathSegments[idx].remainingBounces = 0;
-			} 
+			}   
 			else {
 				scatterRay(pathSegments[idx], intersection.pt3, intersection.surfaceNormal, material, rng);
 				pathSegments[idx].remainingBounces--;
