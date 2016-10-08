@@ -1,12 +1,10 @@
 cmake_minimum_required(VERSION 3.0)
-
 project(cis565_path_tracer)
 
-set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake" ${CMAKE_MODULE_PATH})
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/external/cmake")
 
 # Set up include and lib paths
 set(EXTERNAL "external")
-include_directories("${EXTERNAL}")
 include_directories("${EXTERNAL}/include")
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
     set(EXTERNAL_LIB_PATH "${EXTERNAL}/lib/osx")
@@ -18,13 +16,19 @@ endif()
 link_directories(${EXTERNAL_LIB_PATH})
 list(APPEND CMAKE_LIBRARY_PATH "${EXTERNAL_LIB_PATH}")
 
+# Configure GLFW
+set(GLFW_ROOT_DIR "${EXTERNAL}/glfw-3.2.1")
+# fix for cuda 8 according to Ruoyu Fan
+# We don't need documents, tests, etc..
+set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(GLFW_INSTALL OFF CACHE BOOL "" FORCE)
+add_subdirectory(${GLFW_ROOT_DIR})
+include_directories("${GLFW_ROOT_DIR}/include")
+SET(GLFW_LIBRARY glfw)
 
 # Find up and set up core dependency libs
-
-set(GLFW_INCLUDE_DIR "${EXTERNAL}/include")
-set(GLFW_LIBRARY_DIR "${CMAKE_LIBRARY_PATH}")
-find_library(GLFW_LIBRARY "glfw3" HINTS "${GLFW_LIBRARY_DIR}")
-
 set(GLEW_INCLUDE_DIR "${EXTERNAL}/include")
 set(GLEW_LIBRARY_DIR "${CMAKE_LIBRARY_PATH}")
 add_definitions(-DGLEW_STATIC)
@@ -43,6 +47,7 @@ set(CMAKE_CXX_STANDARD 11)
 
 # Enable CUDA debug info in debug mode builds
 list(APPEND CUDA_NVCC_FLAGS_DEBUG -G -g)
+list(APPEND CUDA_NVCC_FLAGS "-std=c++11")
 
 # OSX-specific hacks/fixes
 if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
@@ -68,7 +73,7 @@ if(${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
 endif()
 
 include_directories(.)
-add_subdirectory(stream_compaction)  # TODO: uncomment if using your stream compaction
+add_subdirectory(stream_compaction)  # DONE: uncomment if using your stream compaction
 add_subdirectory(src)
 
 cuda_add_executable(${CMAKE_PROJECT_NAME}
@@ -78,7 +83,7 @@ cuda_add_executable(${CMAKE_PROJECT_NAME}
 
 target_link_libraries(${CMAKE_PROJECT_NAME}
     src
-    stream_compaction  # TODO: uncomment if using your stream compaction
+    stream_compaction  # DONE: uncomment if using your stream compaction
     ${CORELIBS}
     )
 
