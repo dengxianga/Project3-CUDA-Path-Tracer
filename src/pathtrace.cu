@@ -1,4 +1,4 @@
-#include "pathtrace.h"
+﻿#include "pathtrace.h"
 
 #include <cstdio>
 #include <cuda.h>
@@ -19,7 +19,7 @@
 #include "stream_compaction/efficient.h"
 
 #define ERRORCHECK 1
-
+#define USETHRUSTCOMPT 0
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
 //#define checkCUDAError(msg) checkCUDAErrorFn(msg, FILENAME, __LINE__)
 //void checkCUDAErrorFn(const char *msg, const char *file, int line) {
@@ -268,7 +268,7 @@ __global__ void shadeMaterialAndGather(int iter
 		}
 		progressGatherPath(image, pathSegments[idx]);
 	}
-	
+
 }
 
 // Add the current iteration's output to the overall image
@@ -290,7 +290,7 @@ __global__ void finalGather(int nPaths, glm::vec3 * image, PathSegment * iterati
 {
 	int index = (blockIdx.x * blockDim.x) + threadIdx.x;
 
-	if (index < nPaths )
+	if (index < nPaths)
 	{
 		PathSegment iterationPath = iterationPaths[index];
 		image[iterationPath.pixelIndex] += iterationPath.color;
@@ -430,29 +430,26 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 			);
 
 
-		////get remaining bounces for compaction
-	/*	getPathBounces << <numblocksPathSegmentTracing, blockSize1d >> >(num_paths_on, dev_remain_bounces, dev_paths);
-		num_paths_on = StreamCompaction::Efficient::getMyCompactIndices(num_paths_on, dev_indices4compact, dev_bools4compact, dev_remain_bounces);
-		
-		cudaMemcpy(dev_paths_buff, dev_paths, num_paths_on*sizeof(PathSegment), cudaMemcpyDeviceToDevice);
-		kernScatterPaths << <numblocksPathSegmentTracing, blockSize1d >> >(num_paths_on, dev_paths, dev_paths_buff, dev_bools4compact, dev_indices4compact);
-	*/	
-		num_paths_on = StreamCompaction::Efficient::compactPaths(num_paths_on, dev_paths_buff, dev_indices4compact, dev_bools4compact, dev_paths);
-		
+
+		//
+#if USETHRUSTCOMPT
 		//steam compaction by thrust
-		//auto thrustend = thrust::remove_if(thrust::device, thrust_dev_path_ptr, thrust_dev_path_ptr + num_paths_on, isPathOff());
-		//num_paths_on = thrustend - thrust_dev_path_ptr;
+		auto thrustend = thrust::remove_if(thrust::device, thrust_dev_path_ptr, thrust_dev_path_ptr + num_paths_on, isPathOff());
+		num_paths_on = thrustend - thrust_dev_path_ptr;
+#else
+		num_paths_on = StreamCompaction::Efficient::compactPaths(num_paths_on, dev_paths_buff, dev_indices4compact, dev_bools4compact, dev_paths);
+#endif
 		//printf("%d \n", num_paths_on);
 		depth++;
-		iterationComplete = num_paths_on <= 0; // TODO: should be based off stream compaction results.
+		iterationComplete = num_paths_on <= 0; // DONE: should be based off stream compaction results.
 		float milliscs;
 
-		
+
 	}
 
 	// Assemble this iteration and apply it to the image
 	//dim3 numBlocksPixels = (pixelcount + blockSize1d - 1) / blockSize1d;
-	
+
 	//finalGatherDone << <numBlocksPixels, blockSize1d >> >(num_paths, dev_image, dev_paths);
 
 	///////////////////////////////////////////////////////////////////////////

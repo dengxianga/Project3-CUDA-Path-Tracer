@@ -3,6 +3,13 @@
 #include "common.h"
 #include "efficient.h"
 
+#define NUM_BANKS 16  
+#define LOG_NUM_BANKS 4  
+#define CONFLICT_FREE_OFFSET(n) \
+	((n) >> NUM_BANKS + (n) >> (2 * LOG_NUM_BANKS))
+
+ 
+
 namespace StreamCompaction {
 namespace Efficient {
 
@@ -97,6 +104,8 @@ float scan(int n, int *odata, const int *idata) {
 	cudaFree(idata_buff);
 	return milliscs;
 }
+
+
 float scanOnDevice(int n, int *odata, const int *idata) {
  
 	 
@@ -112,7 +121,7 @@ float scanOnDevice(int n, int *odata, const int *idata) {
 	cudaMemset(idata_buff, 0, n_max*sizeof(int));
 	checkCUDAError("cudaMemset-idata_buff-  failed!");
 
-	/// CPU -->GPU
+	/// GPU -->GPU
 	cudaMemcpy(idata_buff, idata, n*sizeof(int), cudaMemcpyDeviceToDevice);
 	checkCUDAError("cudaMemcpy-idata_buff-failed");
 
@@ -210,24 +219,7 @@ int compact(int n, int *odata, const int *idata, float &milliscs) {
 	cudaFree(indices_buff);
 	return n_remaing + extra;
 }
-int getMyCompactIndices(int n, int *dev_indices, int * dev_bools, const int *dev_data){//using dev pointer, not CPU !!
-	int n_remaing = 0;  
-	dim3 numblocks(std::ceil((double)n / blockSize));
-/*	cudaMemset(dev_bools, 0, n*sizeof(int));
-	cudaMemset(dev_indices, 0, n*sizeof(int));
-	checkCUDAError("cudaMemset-dev_bools-dev_indices failed"); 	*/ 
-	//produce the indices
-	StreamCompaction::Common::kernMapToBoolean << <numblocks, blockSize >> > (n, dev_bools, dev_data);
-
-	scanOnDevice(n, dev_indices, dev_bools);
-	 
-	cudaMemcpy(&n_remaing, dev_indices + n - 1, sizeof(int), cudaMemcpyDeviceToHost);
-	int extra;
-	cudaMemcpy(&extra, dev_bools + n - 1, sizeof(int), cudaMemcpyDeviceToHost);
  
-	return n_remaing + extra;
-	 
-}
 
 __global__ void kernMapPathsToBoolean(int n, int *bools, const PathSegment *paths) {
 	// TODO
@@ -244,7 +236,118 @@ __global__ void kernPathsScatter(int n, PathSegment *odata,
 		odata[indices[index]] = idata[index];
 	}
 }
+ 
 
+
+
+ 
+
+// see http://http.developer.nvidia.com/GPUGems3/gpugems3_ch39.html
+__global__ void preScanShared(int n, int * g_odata, const int* g_idata){
+	int index = threadIdx.x + blockIdx.x*blockDim.x;
+	 
+	extern __shared__ float s_idata[];  // allocated on invocation  
+	int thid = threadIdx.x;
+	int offset = 1;
+	//int ai0 = thid;
+	//int bi0 = thid + (n / 2);
+	//int bankOffsetA = CONFLICT_FREE_OFFSET(ai0);
+	//int bankOffsetB = CONFLICT_FREE_OFFSET(bi0);
+ 
+	s_idata[2 * thid] = g_idata[2 * index]; // load input into shared memory  
+	s_idata[2 * thid + 1] = g_idata[2 * index + 1];
+	//s_idata[ai0 + bankOffsetA] = g_idata[2 * index]; // load input into shared memory  
+	//s_idata[bi0 + bankOffsetB] = g_idata[2 * index + 1];
+	for (int d = n >> 1; d > 0; d >>= 1)                    // build sum in place up the tree  
+	{
+		__syncthreads();
+		if (thid < d)
+		{
+			int ai = offset*(2 * thid + 1) - 1;
+			int bi = offset*(2 * thid + 2) - 1;
+			////banking conflict
+			//ai += CONFLICT_FREE_OFFSET(ai);
+			//bi += CONFLICT_FREE_OFFSET(bi);
+
+			s_idata[bi] += s_idata[ai];
+		}
+		offset *= 2;
+		
+	}
+	//if (thid == 0) { s_idata[n - 1] = 0; } // clear the last element  
+	if (thid == 0) { s_idata[n - 1+CONFLICT_FREE_OFFSET(n - 1)] = 0; } // clear the last element  
+	for (int d = 1; d < n; d *= 2) // traverse down tree & build scan  
+	{
+		offset >>= 1;
+		__syncthreads();
+		if (thid < d)
+		{
+			int ai = offset*(2 * thid + 1) - 1;
+			int bi = offset*(2 * thid + 2) - 1;
+			//banking conflict
+			//ai += CONFLICT_FREE_OFFSET(ai);
+			//bi += CONFLICT_FREE_OFFSET(bi);
+			float t = s_idata[ai];
+			s_idata[ai] = s_idata[bi];
+			s_idata[bi] += t;
+		}
+	}
+	__syncthreads();
+	g_odata[2 * index] = s_idata[2 * thid]; // write results to device memory  
+	g_odata[2 * index + 1] = s_idata[2 * thid + 1];
+	//banking conflict	 
+	//g_odata[2 * index] = s_idata[ai0 + bankOffsetA]; // write results to device memory  
+	//g_odata[2 * index + 1] = s_idata[bi0 + bankOffsetB];
+}
+ 
+//http://www.eecs.umich.edu/courses/eecs570/hw/parprefix.pdf
+__global__ void storeBlockSums(int n, int *sum_buff, const int * odata, const int * idata){
+	int index = threadIdx.x + blockIdx.x * blockDim.x;
+	if (index < n){
+		int offset = (index + 1)*blockSize - 1;
+		sum_buff[index] = odata[offset] + idata[offset];
+	}
+}
+__global__ void sumBuff2Blocks(int n, int *odata, int * sumbuff){
+	int index = threadIdx.x + blockIdx.x * blockDim.x;
+	if (index < n){
+		odata[index] += sumbuff[blockIdx.x];
+	}
+}
+void scanMultiBlocks(int n, int * odata, const int * idata){
+	int numblocks(std::ceil((double)n / blockSize)); 
+	//int numblockshalf = numblocks / 2;
+	int nmax = numblocks*blockSize;
+ 
+	//kernel scan here
+	//if (numblocks == 1){
+	preScanShared << <numblocks, blockSize / 2, blockSize*sizeof(int) >> >(blockSize, odata, idata);
+		//return;
+	//}
+	
+	if (numblocks > 1){
+		int numblocksum(std::ceil((double)numblocks / blockSize)); 
+		int * dev_sum_buff;
+		//int * dev_odata_buff;
+		int *dev_scan_sum_buff;
+		cudaMalloc((void**)&dev_sum_buff, numblocks*sizeof(int));
+		cudaMalloc((void**)&dev_scan_sum_buff, numblocks *sizeof(int));
+
+		
+		storeBlockSums << <numblocksum, blockSize >> >(numblocks, dev_sum_buff, odata, idata);
+		//resursive scan here
+		//scanMultiBlocks(numblocksum, dev_scan_sum_buff, dev_sum_buff);
+		scanMultiBlocks(numblocks, dev_scan_sum_buff, dev_sum_buff);
+		sumBuff2Blocks <<< numblocks, blockSize >> > (nmax, odata, dev_scan_sum_buff);
+
+		//free buff here
+		cudaFree(dev_sum_buff);
+		cudaFree(dev_scan_sum_buff);
+	}
+
+	
+}
+  
 
 int compactPaths(int n, PathSegment * odata_buff, int * bool_buff, int * indices_buff, PathSegment *paths){
  
@@ -265,7 +368,12 @@ int compactPaths(int n, PathSegment * odata_buff, int * bool_buff, int * indices
 	//produce the indices
 	kernMapPathsToBoolean << <numblocks, blockSize >> > (n, bool_buff, paths);
 
-	scanOnDevice(n, indices_buff, bool_buff);
+	 //scanOnDevice(n, indices_buff, bool_buff); 
+	scanMultiBlocks(n, indices_buff, bool_buff);
+	//int levels_max = ilog2ceil(n);
+	//int n_max = 1 << levels_max;
+	//dim3 numblocksmax(std::ceil((double)n_max / blockSize));
+	//kernScanShared << <numblocksmax, blockSize >> >(n, indices_buff, bool_buff);
 
 	kernPathsScatter << <numblocks, blockSize >> >(n, odata_buff, paths, bool_buff, indices_buff);
 
