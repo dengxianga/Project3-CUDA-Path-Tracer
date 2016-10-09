@@ -386,7 +386,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 	Geom *geoms = &(hst_scene->geoms)[0];
 	glm::vec3 curTrans;
 	for (int i = 0; i < hst_scene->geoms.size(); i++){
-		if (geoms[i].isMoving){
+		if (geoms[i].isMoving ){
 			curTrans = geoms[i].translation;
 			curTrans = geoms[i].translation + (geoms[i].movegoal - curTrans) *  (float)0.01 ;
 			//printf("%f \n", (geoms[i].movegoal - curTrans).x);
