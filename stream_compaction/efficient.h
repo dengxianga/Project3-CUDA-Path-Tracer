@@ -1,6 +1,5 @@
 #pragma once
-#include <src/sceneStructs.h>
-#define DEVICE_SHARED_MEMORY  8
+#include <src/sceneStructs.h> 
 namespace StreamCompaction {
 namespace Efficient {
     float scan(int n, int *odata, const int *idata);
