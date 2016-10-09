@@ -122,7 +122,7 @@ ISMOVE      0
 OBJECT 7
 sphere
 material 2
-TRANS       3 4 -1
+TRANS       3 6 -1
 ROTAT       0 0 0
 SCALE       3 3 3
 MOVEGOAL    3 2 -1
