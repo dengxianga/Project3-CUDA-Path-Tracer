@@ -13,7 +13,7 @@
 namespace StreamCompaction {
 namespace Efficient {
 
-// TODO: __global__
+// DONE: __global__
 __global__ void upSweep(int offset, int n,   int *idata){
 	int index = threadIdx.x + blockIdx.x*blockDim.x;
 	if (index >=n) return;
@@ -369,11 +369,7 @@ int compactPaths(int n, PathSegment * odata_buff, int * bool_buff, int * indices
 	kernMapPathsToBoolean << <numblocks, blockSize >> > (n, bool_buff, paths);
 
 	 //scanOnDevice(n, indices_buff, bool_buff); 
-	scanMultiBlocks(n, indices_buff, bool_buff);
-	//int levels_max = ilog2ceil(n);
-	//int n_max = 1 << levels_max;
-	//dim3 numblocksmax(std::ceil((double)n_max / blockSize));
-	//kernScanShared << <numblocksmax, blockSize >> >(n, indices_buff, bool_buff);
+	scanMultiBlocks(n, indices_buff, bool_buff);  
 
 	kernPathsScatter << <numblocks, blockSize >> >(n, odata_buff, paths, bool_buff, indices_buff);
 

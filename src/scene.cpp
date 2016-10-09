@@ -64,6 +64,7 @@ int Scene::loadGeom(string objectid) {
 
         //load transformations
         utilityCore::safeGetline(fp_in, line);
+		newGeom.isMoving = false;//add moving features
         while (!line.empty() && fp_in.good()) {
             vector<string> tokens = utilityCore::tokenizeString(line);
 
@@ -75,7 +76,13 @@ int Scene::loadGeom(string objectid) {
             } else if (strcmp(tokens[0].c_str(), "SCALE") == 0) {
                 newGeom.scale = glm::vec3(atof(tokens[1].c_str()), atof(tokens[2].c_str()), atof(tokens[3].c_str()));
             }
-
+			else if (strcmp(tokens[0].c_str(), "MOVEGOAL") == 0) {
+				newGeom.movegoal = glm::vec3(atof(tokens[1].c_str()), atof(tokens[2].c_str()), atof(tokens[3].c_str()));
+			}
+			else if (strcmp(tokens[0].c_str(), "ISMOVE") == 0) {
+				newGeom.isMoving =  (atof(tokens[1].c_str())) > 0;
+				//printf("%d \n", newGeom.isMoving);
+			}
             utilityCore::safeGetline(fp_in, line);
         }
 
@@ -83,7 +90,7 @@ int Scene::loadGeom(string objectid) {
                 newGeom.translation, newGeom.rotation, newGeom.scale);
         newGeom.inverseTransform = glm::inverse(newGeom.transform);
         newGeom.invTranspose = glm::inverseTranspose(newGeom.transform);
-
+		
         geoms.push_back(newGeom);
         return 1;
     }

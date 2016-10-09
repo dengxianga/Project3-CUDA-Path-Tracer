@@ -12,6 +12,8 @@
 #include "scene.h"
 #include "glm/glm.hpp"
 #include "glm/gtx/norm.hpp"
+#include <glm/gtc/matrix_inverse.hpp>
+
 #include "utilities.h"
 #include "intersections.h"
 #include "interactions.h"
@@ -375,10 +377,31 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 	// * Finally, add this iteration's results to the image. This has been done
 	//   for you.
 
-	// TODO: perform one iteration of path tracing
+	
 
+	// TODO: perform one iteration of path tracing
 	generateRayFromCamera << <blocksPerGrid2d, blockSize2d >> >(cam, iter, traceDepth, dev_paths);
 	checkCUDAError("generate camera ray failed");
+	//TRY motion here     ///////////////////////////
+	Geom *geoms = &(hst_scene->geoms)[0];
+	glm::vec3 curTrans;
+	for (int i = 0; i < hst_scene->geoms.size(); i++){
+		if (geoms[i].isMoving){
+			curTrans = geoms[i].translation;
+			curTrans = geoms[i].translation + (geoms[i].movegoal - curTrans) *  (float)0.01 ;
+			//printf("%f \n", (geoms[i].movegoal - curTrans).x);
+			//printf("%f \n", (geoms[i].movegoal - curTrans).x *  (float)0.1 );
+			//printf("%f \n", curTrans.x);
+			//printf("%f \n", curTrans.x);
+			//printf("%f \n", geoms[i].movegoal.x);
+			geoms[i].translation = curTrans;
+			geoms[i].transform = utilityCore::buildTransformationMatrix(curTrans, geoms[i].rotation, geoms[i].scale);
+			geoms[i].inverseTransform = glm::inverse(geoms[i].transform);
+			geoms[i].invTranspose = glm::inverseTranspose(geoms[i].transform);
+		}
+	}
+	cudaMemcpy(dev_geoms, geoms, hst_scene->geoms.size()*sizeof(Geom), cudaMemcpyHostToDevice);
+	//end motion       /////////////////////////////
 
 	int depth = 0;
 	PathSegment* dev_path_end = dev_paths + pixelcount;
@@ -407,7 +430,6 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 			);
 		checkCUDAError("trace one bounce");
 		cudaDeviceSynchronize();
-
 
 
 		// TODO:

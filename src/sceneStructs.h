@@ -26,6 +26,8 @@ struct Geom {
     glm::mat4 transform;
     glm::mat4 inverseTransform;
     glm::mat4 invTranspose;
+	bool isMoving;
+	glm::vec3 movegoal;
 };
 
 struct Material {
