@@ -88,6 +88,8 @@ FILE        cornell
 EYE         0.0 5 10.5
 LOOKAT      0 5 0
 UP          0 1 0
+DOFX		2
+DOFY		6
 
 
 // Ceiling light
@@ -156,7 +158,7 @@ TRANS       1 6 -1
 ROTAT       0 0 0
 SCALE       3 3 3
 MOVEGOAL    3 1 -1
-ISMOVE      1
+ISMOVE      0
 SPEED  1
 
 // Sphere
@@ -167,7 +169,7 @@ TRANS       -2 6 -1
 ROTAT       0 0 0
 SCALE       2 2 2
 MOVEGOAL    -2 1 -1
-ISMOVE      1
+ISMOVE      0
 SPEED       1
 
 // floor light

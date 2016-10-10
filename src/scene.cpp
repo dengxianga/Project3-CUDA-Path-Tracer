@@ -123,7 +123,7 @@ int Scene::loadCamera() {
             state.traceDepth = atoi(tokens[1].c_str());
         } else if (strcmp(tokens[0].c_str(), "FILE") == 0) {
             state.imageName = tokens[1];
-        }
+        }		
     }
 
     string line;
@@ -137,7 +137,12 @@ int Scene::loadCamera() {
         } else if (strcmp(tokens[0].c_str(), "UP") == 0) {
             camera.up = glm::vec3(atof(tokens[1].c_str()), atof(tokens[2].c_str()), atof(tokens[3].c_str()));
         }
-
+		else if (strcmp(tokens[0].c_str(), "DOFX") == 0) {
+			camera.DOFX = atoi(tokens[1].c_str());
+		}
+		else if (strcmp(tokens[0].c_str(), "DOFY") == 0) {
+			camera.DOFY = atoi(tokens[1].c_str());
+		}
         utilityCore::safeGetline(fp_in, line);
     }
 

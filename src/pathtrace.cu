@@ -28,6 +28,7 @@
 #define CACHEFIRSTBOUNCE 0 //assume stationary scene, toggle off if need motion
 #define ANTIALIAS 1
 #define MOTIONJITTER 1
+#define USEDOF 1
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
  
 
@@ -124,6 +125,20 @@ void pathtraceFree() {
 	checkCUDAError("pathtraceFree");
 }
 
+//see PBRT chap 13
+__device__ glm::vec2 getDistortion(float lambda1, float lambda2)
+{
+	float r; float theta; 
+	if (lambda1 > lambda2){
+		r = lambda2 * 2 - 1;
+		theta = PI / 2 - PI / 4 * (lambda1 * 2 - 1) / (lambda2 * 2 - 1);
+	}
+	else{
+		r = (lambda1 * 2 - 1);
+		theta = (lambda2 * 2 - 1) / (lambda1 * 2 - 1)*PI / 4;
+	}	 
+	return glm::vec2(r*std::cos(theta), r*std::cos(theta));
+}
 /**
 * Generate PathSegments with rays from the camera through the screen into the
 * scene, which is the first bounce of rays.
@@ -165,6 +180,16 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 		segment.remainingBounces = traceDepth;
 #if MOTIONJITTER
 		segment.curtime += utime(rng);
+#endif
+
+#if USEDOF		 
+		glm::vec2 dist = getDistortion(utime(rng), utime(rng))*cam.DOFX;  
+		segment.ray.direction = glm::normalize(segment.ray.direction * std::fabs(cam.DOFY / cam.view.z));
+		 
+		segment.ray.origin.x += dist.x * cam.right.x;
+		segment.ray.origin.y += dist.y * cam.right.y;
+
+		
 #endif
 	}
 }
