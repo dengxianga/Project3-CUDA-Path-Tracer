@@ -23,7 +23,7 @@
  
 #define USECOMPATION 1
 #define USETHRUSTCOMPT 0
-#define SORTBYKEY 0
+#define SORTBYKEY 0 && !USECOMPATION
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
  
 
@@ -220,7 +220,7 @@ __global__ void computeIntersections(
 
 __device__ void progressGatherPath(glm::vec3 * image, const PathSegment& path_segment)
 {
-	if (path_segment.isoff())
+	if (path_segment.isoff() && USECOMPATION)
 	{ //refer to final gather
 		image[path_segment.pixelIndex] += path_segment.color;
 	}
@@ -270,7 +270,7 @@ __global__ void finalGatherDone(int nPaths, glm::vec3 * image, PathSegment * ite
 	if (index < nPaths)
 	{
 		PathSegment iterationPath = iterationPaths[index];
-		if (iterationPath.isoff()){
+		if (iterationPath.isoff() && USECOMPATION){
 			image[iterationPath.pixelIndex] += iterationPath.color;
 		}
 	}
@@ -436,12 +436,15 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 		// materials you have in the scenefile.
 		// TODO: compare between directly shading the path segments and shading
 		// path segments that have been reshuffled to be contiguous in memory.
-
+		int numoffbySort = 0;
 #if SORTBYKEY
 		kernGetMaterialID << <numblocksPathSegmentTracing, blockSize1d >> >(num_paths_on, dev_materialID_buff, dev_intersections);
 		cudaMemcpy(dev_materialID_buff2, dev_materialID_buff, num_paths_on*sizeof(int), cudaMemcpyDeviceToDevice);
 		thrust::sort_by_key(thrust::device, dev_materialID_buff, dev_materialID_buff + num_paths_on, dev_paths);
 		thrust::sort_by_key(thrust::device, dev_materialID_buff2, dev_materialID_buff2 + num_paths_on, dev_intersections);
+/*		numoffbySort = thrust::count_if(thrust_dev_path_ptr, thrust_dev_path_ptr + num_paths_on, isPathOff());
+		num_paths_on -= numoffbySort;
+		printf("num_paths_on %d\n", num_paths_on)*/;
 #endif
 		shadeMaterialAndGather << <numblocksPathSegmentTracing, blockSize1d >> > (
 			depth,
@@ -465,6 +468,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 #endif
 #endif
 		//printf("%d \n", num_paths_on);
+		
 		depth++;
 		iterationComplete = depth > traceDepth || num_paths_on <= 0; // DONE: should be based off stream compaction results.
 		
@@ -475,7 +479,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 	// Assemble this iteration and apply it to the image
 #if !USECOMPATION
 	dim3 numBlocksPixels = (pixelcount + blockSize1d - 1) / blockSize1d;
-	finalGatherDone << <numBlocksPixels, blockSize1d >> >(num_paths, dev_image, dev_paths);
+	finalGather<< <numBlocksPixels, blockSize1d >> >(num_paths, dev_image, dev_paths);
 #endif
 	///////////////////////////////////////////////////////////////////////////
 
