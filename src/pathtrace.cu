@@ -71,7 +71,7 @@ static int * dev_bools4compact = NULL;
 static PathSegment * dev_paths_buff = NULL;
 static int * dev_materialID_buff = NULL;
 static int * dev_materialID_buff2 = NULL;
-static PathSegment * dev_ray_firstbounce = NULL;
+static ShadeableIntersection * dev_intersections_firstbounce = NULL;
 void pathtraceInit(Scene *scene) {
 	hst_scene = scene;
 	const Camera &cam = hst_scene->state.camera;
@@ -98,7 +98,8 @@ void pathtraceInit(Scene *scene) {
 	cudaMalloc(&dev_paths_buff, pixelcount * sizeof(PathSegment));
 	cudaMalloc(&dev_materialID_buff, pixelcount * sizeof(PathSegment));
 	cudaMalloc(&dev_materialID_buff2, pixelcount * sizeof(PathSegment));
-	cudaMalloc(&dev_ray_firstbounce, pixelcount * sizeof(PathSegment));
+	cudaMalloc(&dev_intersections_firstbounce, pixelcount * sizeof(ShadeableIntersection));
+	cudaMemset(dev_intersections_firstbounce, 0, pixelcount * sizeof(ShadeableIntersection));
 
 	checkCUDAError("pathtraceInit");
 }
@@ -116,7 +117,7 @@ void pathtraceFree() {
 	cudaFree(dev_paths_buff);
 	cudaFree(dev_materialID_buff);
 	cudaFree(dev_materialID_buff2);
-	cudaFree(dev_ray_firstbounce);
+	cudaFree(dev_intersections_firstbounce);
 	checkCUDAError("pathtraceFree");
 }
 
@@ -381,19 +382,8 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
 
 	// TODO: perform one iteration of path tracing
-
-	if (CACHEFIRSTBOUNCE &&  iter == 1 || !CACHEFIRSTBOUNCE){
-		generateRayFromCamera << <blocksPerGrid2d, blockSize2d >> >(cam, iter, traceDepth, dev_paths);
-		checkCUDAError("generate camera ray failed");
-		if (CACHEFIRSTBOUNCE){
-			cudaMemcpy(dev_ray_firstbounce, dev_paths, pixelcount * sizeof(PathSegment), cudaMemcpyDeviceToDevice);
-		}
-	}
-	else if (CACHEFIRSTBOUNCE) {
-		cudaMemcpy(dev_paths, dev_ray_firstbounce, pixelcount * sizeof(PathSegment), cudaMemcpyDeviceToDevice);
-	}
-	
-	
+	generateRayFromCamera << <blocksPerGrid2d, blockSize2d >> >(cam, iter, traceDepth, dev_paths);
+	checkCUDAError("generate camera ray failed");
 	//TRY motion here     ///////////////////////////
 	Geom *geoms = &(hst_scene->geoms)[0];
 	glm::vec3 curTrans;
@@ -432,7 +422,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
 		// tracing
 		dim3 numblocksPathSegmentTracing = (num_paths_on + blockSize1d - 1) / blockSize1d;
-		
+		if (CACHEFIRSTBOUNCE && depth == 0 && iter == 1 || !CACHEFIRSTBOUNCE){
 			computeIntersections << <numblocksPathSegmentTracing, blockSize1d >> > (
 				depth
 				, num_paths
@@ -444,7 +434,27 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 			checkCUDAError("trace one bounce");
 			cudaDeviceSynchronize();
 
- 
+		}
+		if (CACHEFIRSTBOUNCE){
+			if (depth == 0 && iter == 1){
+				cudaMemcpy(dev_intersections_firstbounce, dev_intersections, num_paths_on * sizeof(ShadeableIntersection), cudaMemcpyDeviceToDevice);
+			}
+			else if (depth == 0&&iter > 1){//we only cache the first bounce at the very beginning and reuse it as the first bounce in other iterations (assume stationary camera and scene)
+				cudaMemcpy(dev_intersections, dev_intersections_firstbounce, num_paths_on * sizeof(ShadeableIntersection), cudaMemcpyDeviceToDevice);
+			}
+			else{
+				computeIntersections << <numblocksPathSegmentTracing, blockSize1d >> > (
+					depth
+					, num_paths
+					, dev_paths
+					, dev_geoms
+					, hst_scene->geoms.size()
+					, dev_intersections
+					);
+				checkCUDAError("trace one bounce");
+				cudaDeviceSynchronize();
+			}
+		}
 
 
 		// TODO:
@@ -465,7 +475,6 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 		num_paths_on -= numoffbySort;
 		printf("num_paths_on %d\n", num_paths_on)*/;
 #endif
-
 		shadeMaterialAndGather << <numblocksPathSegmentTracing, blockSize1d >> > (
 			depth,
 			num_paths_on,
@@ -486,7 +495,8 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 #else
 		num_paths_on = StreamCompaction::Efficient::compactPaths(num_paths_on, dev_paths_buff, dev_indices4compact, dev_bools4compact, dev_paths);
 #endif
-#endif 
+#endif
+		//printf("%d \n", num_paths_on);
 		
 		depth++;
 		iterationComplete = depth > traceDepth || num_paths_on <= 0; // DONE: should be based off stream compaction results.
