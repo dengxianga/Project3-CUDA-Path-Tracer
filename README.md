@@ -14,3 +14,7 @@ project, and we will not be able to grade you without a good README.
 ![](img/blur3.gif)
 
 ![](img/beforeblur.png)
+
+![](img/AA.gif)
+
+![](img/noAA.gif)
