@@ -132,12 +132,12 @@ ISMOVE      0
 OBJECT 7
 sphere
 material 2
-TRANS       2 6 -1
+TRANS       1 6 -1
 ROTAT       0 0 0
 SCALE       3 3 3
 MOVEGOAL    3 1 -1
-ISMOVE      0
-SPEED  2
+ISMOVE      1
+SPEED  1
 
 // Sphere
 OBJECT 8
@@ -147,7 +147,7 @@ TRANS       -2 6 -1
 ROTAT       0 0 0
 SCALE       2 2 2
 MOVEGOAL    -2 1 -1
-ISMOVE      0
+ISMOVE      1
 SPEED       1
 
 // Ceiling light
