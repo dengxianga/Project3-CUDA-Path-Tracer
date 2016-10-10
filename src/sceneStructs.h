@@ -29,6 +29,7 @@ struct Geom {
 	bool isMoving;
 	glm::vec3 movegoal;
 	float speed;
+	float speed0;
 };
 
 struct Material {

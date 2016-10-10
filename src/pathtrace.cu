@@ -27,6 +27,7 @@
 #define SORTBYKEY 0 && !USECOMPATION
 #define CACHEFIRSTBOUNCE 0 //assume stationary scene, toggle off if need motion
 #define ANTIALIAS 1
+#define MOTIONJITTER 1
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
  
 
@@ -152,6 +153,7 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 
 		auto rng = makeSeededRandomEngine(iter, x, 0);
 		thrust::uniform_real_distribution<float> AA(-0.5, 0.5);
+		thrust::uniform_real_distribution<float> utime(0,0.1);
 
 #if ANTIALIAS
 		glm::vec3 jitterAA((float)AA(rng), (float)AA(rng), (float)AA(rng));
@@ -159,6 +161,9 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 #endif
 		segment.pixelIndex = index;
 		segment.remainingBounces = traceDepth;
+#if MOTIONJITTER
+		segment.curtime += utime(rng);
+#endif
 	}
 }
 
@@ -196,14 +201,29 @@ __global__ void computeIntersections(
 		for (int i = 0; i < geoms_size; i++)
 		{
 			Geom & geom = geoms[i];
+			Geom  geomSeen = geoms[i];
+			
+#if MOTIONJITTER		
+			glm::vec3 curTrans;
+			if (geomSeen.isMoving){
+				curTrans = geomSeen.translation;
+				float dx =  geomSeen.speed *pathSegment.curtime;
 
-			if (geom.type == CUBE)
-			{
-				t = boxIntersectionTest(geom, pathSegment.ray, tmp_intersect, tmp_normal, outside);
+				curTrans = glm::vec3(std::cos(dx), std::sin(dx), std::cos(dx));
+				geomSeen.translation = curTrans;
+				geomSeen.transform = glm::translate(geomSeen.transform, curTrans);
+				//geomSeen.transform = utilityCore::buildTransformationMatrix(geomSeen.translation, geomSeen.rotation, geomSeen.scale);
+				geomSeen.inverseTransform = glm::inverse(geomSeen.transform);
+				geomSeen.invTranspose = glm::inverseTranspose(geomSeen.transform);
 			}
-			else if (geom.type == SPHERE)
+#endif			 
+			if (geomSeen.type == CUBE)
 			{
-				t = sphereIntersectionTest(geom, pathSegment.ray, tmp_intersect, tmp_normal, outside);
+				t = boxIntersectionTest(geomSeen, pathSegment.ray, tmp_intersect, tmp_normal, outside);
+			}
+			else if (geomSeen.type == SPHERE)
+			{
+				t = sphereIntersectionTest(geomSeen, pathSegment.ray, tmp_intersect, tmp_normal, outside);
 			}
 			// TODO: add more intersection tests here... triangle? metaball? CSG?
 
@@ -389,23 +409,39 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 	// * Finally, add this iteration's results to the image. This has been done
 	//   for you.
 
-
+#if MOTIONJITTER
 	//TRY motion here     ///////////////////////////
+	//Geom *geoms = &(hst_scene->geoms)[0];
+	//glm::vec3 curTrans;
+	//for (int i = 0; i < hst_scene->geoms.size(); i++){
+	//	if (geoms[i].isMoving){
+	//		curTrans = geoms[i].translation;
+	//		curTrans = geoms[i].translation + (geoms[i].movegoal - curTrans) *  (float)geoms[i].speed; 
+	//		geoms[i].translation = curTrans;		 
+	//		geoms[i].transform = utilityCore::buildTransformationMatrix(geoms[i].translation, geoms[i].rotation, geoms[i].scale);
+	//		geoms[i].inverseTransform = glm::inverse(geoms[i].transform);
+	//		geoms[i].invTranspose = glm::inverseTranspose(geoms[i].transform);
+	//	}
+	//}
+	//cudaMemcpy(dev_geoms, geoms, hst_scene->geoms.size()*sizeof(Geom), cudaMemcpyHostToDevice);
 	Geom *geoms = &(hst_scene->geoms)[0];
 	glm::vec3 curTrans;
 	for (int i = 0; i < hst_scene->geoms.size(); i++){
 		if (geoms[i].isMoving){
-			curTrans = geoms[i].translation;
-			curTrans = geoms[i].translation + (geoms[i].movegoal - curTrans) *  (float)geoms[i].speed; 
-			geoms[i].translation = curTrans;		 
-			geoms[i].transform = utilityCore::buildTransformationMatrix(geoms[i].translation, geoms[i].rotation, geoms[i].scale);
-			geoms[i].inverseTransform = glm::inverse(geoms[i].transform);
-			geoms[i].invTranspose = glm::inverseTranspose(geoms[i].transform);
+			if (iter == 1){
+				geoms[i].speed = geoms[i].speed0;
+			}
+			else if (geoms[i].speed >= 0){
+				geoms[i].speed -= 0.01f;
+			}
+			else if (geoms[i].speed <= 0){
+				geoms[i].speed = 0.0f;
+			}
 		}
 	}
 	cudaMemcpy(dev_geoms, geoms, hst_scene->geoms.size()*sizeof(Geom), cudaMemcpyHostToDevice);
 	//end motion       /////////////////////////////
-
+#endif
 
 	// TODO: perform one iteration of path tracing
 	generateRayFromCamera << <blocksPerGrid2d, blockSize2d >> >(cam, iter, traceDepth, dev_paths);
