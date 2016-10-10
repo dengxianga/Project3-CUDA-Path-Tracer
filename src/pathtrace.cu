@@ -23,7 +23,7 @@
  
 #define USECOMPATION 1
 #define USETHRUSTCOMPT 0
-#define SORTBYKEY 1
+#define SORTBYKEY 0
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
  
 
@@ -68,6 +68,8 @@ static int * dev_remain_bounces = NULL;
 static int * dev_indices4compact = NULL;
 static int * dev_bools4compact = NULL;
 static PathSegment * dev_paths_buff = NULL;
+static int * dev_materialID_buff = NULL;
+static int * dev_materialID_buff2 = NULL;
 void pathtraceInit(Scene *scene) {
 	hst_scene = scene;
 	const Camera &cam = hst_scene->state.camera;
@@ -92,6 +94,8 @@ void pathtraceInit(Scene *scene) {
 	cudaMalloc(&dev_indices4compact, pixelcount * sizeof(int));
 	cudaMalloc(&dev_bools4compact, pixelcount * sizeof(int));
 	cudaMalloc(&dev_paths_buff, pixelcount * sizeof(PathSegment));
+	cudaMalloc(&dev_materialID_buff, pixelcount * sizeof(PathSegment));
+	cudaMalloc(&dev_materialID_buff2, pixelcount * sizeof(PathSegment));
 	checkCUDAError("pathtraceInit");
 }
 
@@ -106,6 +110,8 @@ void pathtraceFree() {
 	cudaFree(dev_indices4compact);
 	cudaFree(dev_bools4compact);
 	cudaFree(dev_paths_buff);
+	cudaFree(dev_materialID_buff);
+	cudaFree(dev_materialID_buff2);
 	checkCUDAError("pathtraceFree");
 }
 
@@ -308,6 +314,12 @@ __global__ void kernScatterPaths(int n, PathSegment *odata,
 		odata[indices[index]] = idata[index];
 	}
 }
+__global__ void kernGetMaterialID(int n, int *obuff, const ShadeableIntersection * intersects){
+	int index = threadIdx.x + blockIdx.x * blockDim.x;
+	if (index > n){
+		obuff[index] = intersects[index].materialId;
+	}
+}
 /**
 * Wrapper for the __global__ call that sets up the kernel calls and does a ton
 * of memory management
@@ -425,6 +437,12 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 		// TODO: compare between directly shading the path segments and shading
 		// path segments that have been reshuffled to be contiguous in memory.
 
+#if SORTBYKEY
+		kernGetMaterialID << <numblocksPathSegmentTracing, blockSize1d >> >(num_paths_on, dev_materialID_buff, dev_intersections);
+		cudaMemcpy(dev_materialID_buff2, dev_materialID_buff, num_paths_on*sizeof(int), cudaMemcpyDeviceToDevice);
+		thrust::sort_by_key(thrust::device, dev_materialID_buff, dev_materialID_buff + num_paths_on, dev_paths);
+		thrust::sort_by_key(thrust::device, dev_materialID_buff2, dev_materialID_buff2 + num_paths_on, dev_intersections);
+#endif
 		shadeMaterialAndGather << <numblocksPathSegmentTracing, blockSize1d >> > (
 			depth,
 			num_paths_on,
