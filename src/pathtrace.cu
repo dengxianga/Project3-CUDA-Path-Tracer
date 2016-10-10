@@ -20,29 +20,12 @@
 #include "stream_compaction/common.h"
 #include "stream_compaction/efficient.h"
 
-#define ERRORCHECK 1
+ 
+#define USECOMPATION 1
 #define USETHRUSTCOMPT 0
+#define SORTBYKEY 1
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
-//#define checkCUDAError(msg) checkCUDAErrorFn(msg, FILENAME, __LINE__)
-//void checkCUDAErrorFn(const char *msg, const char *file, int line) {
-//#if ERRORCHECK
-//	cudaDeviceSynchronize();
-//	cudaError_t err = cudaGetLastError();
-//	if (cudaSuccess == err) {
-//		return;
-//	}
-//
-//	fprintf(stderr, "CUDA error");
-//	if (file) {
-//		fprintf(stderr, " (%s:%d)", file, line);
-//	}
-//	fprintf(stderr, ": %s: %s\n", msg, cudaGetErrorString(err));
-//#  ifdef _WIN32
-//	getchar();
-//#  endif
-//	exit(EXIT_FAILURE);
-//#endif
-//}
+ 
 
 __host__ __device__
 thrust::default_random_engine makeSeededRandomEngine(int iter, int index, int depth) {
@@ -331,6 +314,7 @@ __global__ void kernScatterPaths(int n, PathSegment *odata,
 */
 void pathtrace(uchar4 *pbo, int frame, int iter) {
 	const int traceDepth = hst_scene->state.traceDepth;
+	//printf("traceDepth %d \n", traceDepth);
 	const Camera &cam = hst_scene->state.camera;
 	const int pixelcount = cam.resolution.x * cam.resolution.y;
 
@@ -377,7 +361,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 	// * Finally, add this iteration's results to the image. This has been done
 	//   for you.
 
-	
+
 
 	// TODO: perform one iteration of path tracing
 	generateRayFromCamera << <blocksPerGrid2d, blockSize2d >> >(cam, iter, traceDepth, dev_paths);
@@ -386,9 +370,9 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 	Geom *geoms = &(hst_scene->geoms)[0];
 	glm::vec3 curTrans;
 	for (int i = 0; i < hst_scene->geoms.size(); i++){
-		if (geoms[i].isMoving ){
+		if (geoms[i].isMoving){
 			curTrans = geoms[i].translation;
-			curTrans = geoms[i].translation + (geoms[i].movegoal - curTrans) *  (float)0.01 ;
+			curTrans = geoms[i].translation + (geoms[i].movegoal - curTrans) *  (float)0.01;
 			//printf("%f \n", (geoms[i].movegoal - curTrans).x);
 			//printf("%f \n", (geoms[i].movegoal - curTrans).x *  (float)0.1 );
 			//printf("%f \n", curTrans.x);
@@ -453,7 +437,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
 
 
-		//
+#if USECOMPATION
 #if USETHRUSTCOMPT
 		//steam compaction by thrust
 		auto thrustend = thrust::remove_if(thrust::device, thrust_dev_path_ptr, thrust_dev_path_ptr + num_paths_on, isPathOff());
@@ -461,19 +445,20 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 #else
 		num_paths_on = StreamCompaction::Efficient::compactPaths(num_paths_on, dev_paths_buff, dev_indices4compact, dev_bools4compact, dev_paths);
 #endif
+#endif
 		//printf("%d \n", num_paths_on);
 		depth++;
-		iterationComplete = num_paths_on <= 0; // DONE: should be based off stream compaction results.
-		float milliscs;
+		iterationComplete = depth > traceDepth || num_paths_on <= 0; // DONE: should be based off stream compaction results.
+		
 
 
 	}
 
 	// Assemble this iteration and apply it to the image
-	//dim3 numBlocksPixels = (pixelcount + blockSize1d - 1) / blockSize1d;
-
-	//finalGatherDone << <numBlocksPixels, blockSize1d >> >(num_paths, dev_image, dev_paths);
-
+#if !USECOMPATION
+	dim3 numBlocksPixels = (pixelcount + blockSize1d - 1) / blockSize1d;
+	finalGatherDone << <numBlocksPixels, blockSize1d >> >(num_paths, dev_image, dev_paths);
+#endif
 	///////////////////////////////////////////////////////////////////////////
 
 	// Send results to OpenGL buffer for rendering
