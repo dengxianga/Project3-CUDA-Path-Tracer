@@ -11,6 +11,8 @@ CUDA Path Tracer
 *DO NOT* leave the README to the last minute! It is a crucial part of the
 project, and we will not be able to grade you without a good README.
 
+![](img/blur3.gif)
+
 ![](img/blur.png)
 
 ![](img/postblur.png)
