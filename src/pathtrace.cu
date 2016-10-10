@@ -151,13 +151,11 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 
 
 		auto rng = makeSeededRandomEngine(iter, x, 0);
-		thrust::uniform_real_distribution<float> AA(0, PI);
+		thrust::uniform_real_distribution<float> AA(-0.5, 0.5);
 
-#if ANTIALIAS 
-		float angjitter = 2 * PI*(float)AA(rng);
-		float jitter2 = std::cos(angjitter); 
-		glm::vec3 jitterAA(jitter2, jitter2, jitter2);
-		segment.ray.direction += jitterAA*(float)0.0025;
+#if ANTIALIAS
+		glm::vec3 jitterAA((float)AA(rng), (float)AA(rng), (float)AA(rng));
+		segment.ray.direction += jitterAA*(float)0.005;
 #endif
 		segment.pixelIndex = index;
 		segment.remainingBounces = traceDepth;
