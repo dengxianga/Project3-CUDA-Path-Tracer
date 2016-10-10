@@ -13,6 +13,7 @@
 #include "glm/glm.hpp"
 #include "glm/gtx/norm.hpp"
 #include <glm/gtc/matrix_inverse.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include "utilities.h"
 #include "intersections.h"
@@ -24,7 +25,8 @@
 #define USECOMPATION 1
 #define USETHRUSTCOMPT 0
 #define SORTBYKEY 0 && !USECOMPATION
-#define CACHEFIRSTBOUNCE 1
+#define CACHEFIRSTBOUNCE 0 //assume stationary scene, toggle off if need motion
+#define ANTIALIAS 1
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
  
 
@@ -141,12 +143,23 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 		segment.ray.origin = cam.position;
 		segment.color = glm::vec3(1.0f, 1.0f, 1.0f);
 
-		// TODO: implement antialiasing by jittering the ray
+		// DONE: implement antialiasing by jittering the ray
 		segment.ray.direction = glm::normalize(cam.view
 			- cam.right * cam.pixelLength.x * ((float)x - (float)cam.resolution.x * 0.5f)
 			- cam.up * cam.pixelLength.y * ((float)y - (float)cam.resolution.y * 0.5f)
 			);
 
+
+		auto rng = makeSeededRandomEngine(iter, x, 0);
+		thrust::uniform_real_distribution<float> AA(0, 1);
+
+#if ANTIALIAS
+		float tmp = std::cos((float)AA(rng)*PI);
+		float tmp2 = std::sqrt(1 - tmp*tmp);
+		float angjitter = 2 * PI*(float)AA(rng);
+		glm::vec3 jitterAA(tmp2*std::cos(angjitter), tmp2*std::sin(angjitter), tmp);
+		segment.ray.direction += jitterAA*(float)0.0025;
+#endif
 		segment.pixelIndex = index;
 		segment.remainingBounces = traceDepth;
 	}
@@ -380,30 +393,27 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 	//   for you.
 
 
-
-	// TODO: perform one iteration of path tracing
-	generateRayFromCamera << <blocksPerGrid2d, blockSize2d >> >(cam, iter, traceDepth, dev_paths);
-	checkCUDAError("generate camera ray failed");
 	//TRY motion here     ///////////////////////////
 	Geom *geoms = &(hst_scene->geoms)[0];
 	glm::vec3 curTrans;
 	for (int i = 0; i < hst_scene->geoms.size(); i++){
 		if (geoms[i].isMoving){
 			curTrans = geoms[i].translation;
-			curTrans = geoms[i].translation + (geoms[i].movegoal - curTrans) *  (float)0.01;
-			//printf("%f \n", (geoms[i].movegoal - curTrans).x);
-			//printf("%f \n", (geoms[i].movegoal - curTrans).x *  (float)0.1 );
-			//printf("%f \n", curTrans.x);
-			//printf("%f \n", curTrans.x);
-			//printf("%f \n", geoms[i].movegoal.x);
-			geoms[i].translation = curTrans;
-			geoms[i].transform = utilityCore::buildTransformationMatrix(curTrans, geoms[i].rotation, geoms[i].scale);
+			curTrans = geoms[i].translation + (geoms[i].movegoal - curTrans) *  (float)geoms[i].speed; 
+			geoms[i].translation = curTrans;		 
+			geoms[i].transform = utilityCore::buildTransformationMatrix(geoms[i].translation, geoms[i].rotation, geoms[i].scale);
 			geoms[i].inverseTransform = glm::inverse(geoms[i].transform);
 			geoms[i].invTranspose = glm::inverseTranspose(geoms[i].transform);
 		}
 	}
 	cudaMemcpy(dev_geoms, geoms, hst_scene->geoms.size()*sizeof(Geom), cudaMemcpyHostToDevice);
 	//end motion       /////////////////////////////
+
+
+	// TODO: perform one iteration of path tracing
+	generateRayFromCamera << <blocksPerGrid2d, blockSize2d >> >(cam, iter, traceDepth, dev_paths);
+	checkCUDAError("generate camera ray failed");
+
 
 	int depth = 0;
 	PathSegment* dev_path_end = dev_paths + pixelcount;

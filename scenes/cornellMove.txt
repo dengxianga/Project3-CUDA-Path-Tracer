@@ -126,4 +126,16 @@ TRANS       3 6 -1
 ROTAT       0 0 0
 SCALE       3 3 3
 MOVEGOAL    3 1 -1
-ISMOVE      0
+ISMOVE      1
+SPEED  0.1
+
+// Sphere
+OBJECT 8
+sphere
+material 3
+TRANS       -2 6 -1
+ROTAT       0 0 0
+SCALE       2 2 2
+MOVEGOAL    -2 1 -1
+ISMOVE      1
+SPEED       0.3

@@ -28,6 +28,7 @@ struct Geom {
     glm::mat4 invTranspose;
 	bool isMoving;
 	glm::vec3 movegoal;
+	float speed;
 };
 
 struct Material {
@@ -66,6 +67,7 @@ struct PathSegment {
 	glm::vec3 color;
 	int pixelIndex;
 	int remainingBounces;
+	float curtime;
 	__host__ __device__ bool isoff() const
 	{
 		return remainingBounces <= 0;

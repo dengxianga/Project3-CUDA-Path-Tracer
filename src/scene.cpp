@@ -83,6 +83,10 @@ int Scene::loadGeom(string objectid) {
 				newGeom.isMoving =  (atof(tokens[1].c_str())) > 0;
 				//printf("%d \n", newGeom.isMoving);
 			}
+			else if (strcmp(tokens[0].c_str(), "SPEED") == 0) {
+				newGeom.speed = (atof(tokens[1].c_str()));
+				//printf("%d \n", newGeom.isMoving);
+			}
             utilityCore::safeGetline(fp_in, line);
         }
 
