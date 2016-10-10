@@ -1,7 +1,7 @@
 #pragma once
 
 #include "intersections.h"
-
+#include <glm/gtx/vector_angle.hpp>
 // CHECKITOUT
 /**
 * Computes a cosine-weighted random direction in a hemisphere.
@@ -68,6 +68,7 @@ glm::vec3 normal, thrust::default_random_engine &rng) {
 *
 * You may need to change the parameter list for your purposes!
 */
+
 __host__ __device__
 void scatterRay(
 PathSegment & pathSegment,
@@ -78,26 +79,60 @@ thrust::default_random_engine &rng) {
 	// TODO: implement this.
 	// A basic implementation of pure-diffuse shading will just call the
 	// calculateRandomDirectionInHemisphere defined above.
-	glm::vec3 rayDirection;
-	//TODO: just like this for now
-	if (m.hasReflective > 0.0f || m.hasRefractive > 0.0f){
-		if (m.hasReflective > 0.0f){
-			rayDirection = glm::reflect(pathSegment.ray.direction, normal);
-			pathSegment.color *= m.specular.color;
-			pathSegment.color *= m.color; //update the color
-		}
+	//glm::vec3 rayDirection;
+	////TODO: just like this for now
+	//if (m.hasReflective > 0.0f || m.hasRefractive > 0.0f){
+	//	if (m.hasReflective > 0.0f){
+	//		rayDirection = glm::reflect(pathSegment.ray.direction, normal);
+	//		pathSegment.color *= m.specular.color;
+	//		pathSegment.color *= m.color; //update the color
+	//	}
 
-		else if (m.hasRefractive > 0.0f){
-			rayDirection = glm::refract(pathSegment.ray.direction, normal, m.indexOfRefraction);
-			pathSegment.color *= m.color;
+	//	else if (m.hasRefractive > 0.0f){
+	//		rayDirection = glm::refract(pathSegment.ray.direction, normal, m.indexOfRefraction);
+	//		pathSegment.color *= m.color;
+	//	}
+	//}
+	//else {
+	//	rayDirection = calculateRandomDirectionInHemisphere(normal, rng);
+	//	pathSegment.color *= m.color;
+	//}
+	////pathSegment.color *= glm::abs(glm::dot(rayDirection, normal)); //decay the color
+	//pathSegment.ray.origin = intersect + EPSILON * normal;
+	//pathSegment.ray.direction = rayDirection;
+
+	if (m.hasReflective > 0.0f) {
+		pathSegment.ray.direction = glm::reflect(pathSegment.ray.direction, normal);
+	}
+	else if (m.hasRefractive > 0.0f) {
+		thrust::uniform_real_distribution<float> uprob(0, 1);
+		//schlick test here https://en.wikipedia.org/wiki/Schlick%27s_approximation
+		float R0 = std::pow((1 - m.indexOfRefraction) / (1 + m.indexOfRefraction), 2);
+		//float theta = glm::angle(normal, pathSegment.ray.direction );
+		float dot = fabs(glm::dot(normal, pathSegment.ray.direction));//stupid bug
+		//float R = R0 + (1 - R0)*std::pow(1 - std::cos(theta), 5);
+		float R = R0 + (1 - R0)*std::pow(1 - dot, 5);
+		if (R > uprob(rng)) {
+			pathSegment.ray.direction = glm::reflect(pathSegment.ray.direction, normal);
+		}
+		else
+		{
+			//see https://en.wikipedia.org/wiki/Snell%27s_law
+			float refrfac;
+			if (pathSegment.hasLightIn){
+				refrfac = m.indexOfRefraction;
+			}
+			else{
+				refrfac = 1 / m.indexOfRefraction;
+			}
+			pathSegment.ray.direction = glm::refract(pathSegment.ray.direction, normal, refrfac);
+			pathSegment.hasLightIn = uprob(rng) > 0.5;
 		}
 	}
 	else {
-		rayDirection = calculateRandomDirectionInHemisphere(normal, rng);
-		pathSegment.color *= m.color;
+		pathSegment.ray.direction = calculateRandomDirectionInHemisphere(normal, rng);
 	}
-	//pathSegment.color *= glm::abs(glm::dot(rayDirection, normal)); //decay the color
-	pathSegment.ray.origin = intersect + EPSILON * normal;
-	pathSegment.ray.direction = rayDirection;
 
+	pathSegment.color *= m.color;
+	pathSegment.ray.origin = intersect + 0.005f * pathSegment.ray.direction;
 }

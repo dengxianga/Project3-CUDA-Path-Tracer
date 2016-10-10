@@ -69,6 +69,7 @@ struct PathSegment {
 	int pixelIndex;
 	int remainingBounces;
 	float curtime;
+	bool hasLightIn;
 	__host__ __device__ bool isoff() const
 	{
 		return remainingBounces <= 0;
