@@ -422,7 +422,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
 		// tracing
 		dim3 numblocksPathSegmentTracing = (num_paths_on + blockSize1d - 1) / blockSize1d;
-		if (CACHEFIRSTBOUNCE && depth == 0 && iter == 1 || !CACHEFIRSTBOUNCE){
+		if ((CACHEFIRSTBOUNCE && ((depth == 0 && iter == 1) || (depth > 0))) || !CACHEFIRSTBOUNCE){
 			computeIntersections << <numblocksPathSegmentTracing, blockSize1d >> > (
 				depth
 				, num_paths
@@ -442,18 +442,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 			else if (depth == 0&&iter > 1){//we only cache the first bounce at the very beginning and reuse it as the first bounce in other iterations (assume stationary camera and scene)
 				cudaMemcpy(dev_intersections, dev_intersections_firstbounce, num_paths_on * sizeof(ShadeableIntersection), cudaMemcpyDeviceToDevice);
 			}
-			else{
-				computeIntersections << <numblocksPathSegmentTracing, blockSize1d >> > (
-					depth
-					, num_paths
-					, dev_paths
-					, dev_geoms
-					, hst_scene->geoms.size()
-					, dev_intersections
-					);
-				checkCUDAError("trace one bounce");
-				cudaDeviceSynchronize();
-			}
+ 
 		}
 
 
