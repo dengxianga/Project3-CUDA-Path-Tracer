@@ -24,6 +24,7 @@
 #define USECOMPATION 1
 #define USETHRUSTCOMPT 0
 #define SORTBYKEY 0 && !USECOMPATION
+#define CACHEFIRSTBOUNCE 1
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
  
 
@@ -70,6 +71,7 @@ static int * dev_bools4compact = NULL;
 static PathSegment * dev_paths_buff = NULL;
 static int * dev_materialID_buff = NULL;
 static int * dev_materialID_buff2 = NULL;
+static PathSegment * dev_ray_firstbounce = NULL;
 void pathtraceInit(Scene *scene) {
 	hst_scene = scene;
 	const Camera &cam = hst_scene->state.camera;
@@ -96,6 +98,8 @@ void pathtraceInit(Scene *scene) {
 	cudaMalloc(&dev_paths_buff, pixelcount * sizeof(PathSegment));
 	cudaMalloc(&dev_materialID_buff, pixelcount * sizeof(PathSegment));
 	cudaMalloc(&dev_materialID_buff2, pixelcount * sizeof(PathSegment));
+	cudaMalloc(&dev_ray_firstbounce, pixelcount * sizeof(PathSegment));
+
 	checkCUDAError("pathtraceInit");
 }
 
@@ -112,6 +116,7 @@ void pathtraceFree() {
 	cudaFree(dev_paths_buff);
 	cudaFree(dev_materialID_buff);
 	cudaFree(dev_materialID_buff2);
+	cudaFree(dev_ray_firstbounce);
 	checkCUDAError("pathtraceFree");
 }
 
@@ -376,8 +381,19 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
 
 	// TODO: perform one iteration of path tracing
-	generateRayFromCamera << <blocksPerGrid2d, blockSize2d >> >(cam, iter, traceDepth, dev_paths);
-	checkCUDAError("generate camera ray failed");
+
+	if (CACHEFIRSTBOUNCE &&  iter == 1 || !CACHEFIRSTBOUNCE){
+		generateRayFromCamera << <blocksPerGrid2d, blockSize2d >> >(cam, iter, traceDepth, dev_paths);
+		checkCUDAError("generate camera ray failed");
+		if (CACHEFIRSTBOUNCE){
+			cudaMemcpy(dev_ray_firstbounce, dev_paths, pixelcount * sizeof(PathSegment), cudaMemcpyDeviceToDevice);
+		}
+	}
+	else if (CACHEFIRSTBOUNCE) {
+		cudaMemcpy(dev_paths, dev_ray_firstbounce, pixelcount * sizeof(PathSegment), cudaMemcpyDeviceToDevice);
+	}
+	
+	
 	//TRY motion here     ///////////////////////////
 	Geom *geoms = &(hst_scene->geoms)[0];
 	glm::vec3 curTrans;
@@ -416,16 +432,19 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
 		// tracing
 		dim3 numblocksPathSegmentTracing = (num_paths_on + blockSize1d - 1) / blockSize1d;
-		computeIntersections << <numblocksPathSegmentTracing, blockSize1d >> > (
-			depth
-			, num_paths
-			, dev_paths
-			, dev_geoms
-			, hst_scene->geoms.size()
-			, dev_intersections
-			);
-		checkCUDAError("trace one bounce");
-		cudaDeviceSynchronize();
+		
+			computeIntersections << <numblocksPathSegmentTracing, blockSize1d >> > (
+				depth
+				, num_paths
+				, dev_paths
+				, dev_geoms
+				, hst_scene->geoms.size()
+				, dev_intersections
+				);
+			checkCUDAError("trace one bounce");
+			cudaDeviceSynchronize();
+
+ 
 
 
 		// TODO:
@@ -446,6 +465,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 		num_paths_on -= numoffbySort;
 		printf("num_paths_on %d\n", num_paths_on)*/;
 #endif
+
 		shadeMaterialAndGather << <numblocksPathSegmentTracing, blockSize1d >> > (
 			depth,
 			num_paths_on,
@@ -466,8 +486,7 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 #else
 		num_paths_on = StreamCompaction::Efficient::compactPaths(num_paths_on, dev_paths_buff, dev_indices4compact, dev_bools4compact, dev_paths);
 #endif
-#endif
-		//printf("%d \n", num_paths_on);
+#endif 
 		
 		depth++;
 		iterationComplete = depth > traceDepth || num_paths_on <= 0; // DONE: should be based off stream compaction results.
