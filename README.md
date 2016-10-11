@@ -1,10 +1,7 @@
 CUDA Path Tracer
 ================
 
-**University of Pennsylvania, CIS 565: GPU Programming and Architecture, Project 3**
-
-
-**University of Pennsylvania, CIS 565: GPU Programming and Architecture, Project 2**
+**University of Pennsylvania, CIS 565: GPU Programming and Architecture, Project 3** 
 
 * Xiang Deng
 * Tested on:  Windows 10-Home, i7-6700U @ 2.6GHz 16GB, GTX 1060 6GB (Personal Computer)
@@ -74,3 +71,9 @@ Sorting trememdously increases the delay in processing; whereas caching first bo
 
 ![](charts/5.PNG)
 
+* CMakeLists Changes
+
+A couple changed were made, 1. Changed CUDA compatiblity sm_20 --> sm_61; 2. Added file names from stream compaction folder; 3. Adjustments of main cmakelist file 
+for fixing linking errors with Visual Studio 2013, CUDA 8 (see https://groups.google.com/forum/#!topic/cis-565-fall-2016/kMSmwhhdqFg).
+
+* Togglable parameters, please see common.h.
