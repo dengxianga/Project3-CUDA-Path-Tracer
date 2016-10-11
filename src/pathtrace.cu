@@ -186,11 +186,15 @@ __global__ void generateRayFromCamera(Camera cam, int iter, int traceDepth, Path
 
 #if USEDOF		 
 		glm::vec2 dist = getDistortion(utime(rng), utime(rng))*cam.DOFX;  
-		segment.ray.direction = glm::normalize(segment.ray.direction * std::fabs(cam.DOFY / cam.view.z));
+		//segment.ray.direction = glm::normalize(segment.ray.direction * std::fabs(cam.DOFY / cam.view.z));
 		 
-		segment.ray.origin.x += dist.x * cam.right.x;
-		segment.ray.origin.y += dist.y * cam.right.y;
-
+		//segment.ray.origin.x += dist.x * cam.right.x;
+		//segment.ray.origin.y += dist.y * cam.right.y; 
+		 
+		float len = std::abs(cam.DOFY / cam.view.z);
+		glm::vec3 focal = len * segment.ray.direction + segment.ray.origin;
+		segment.ray.origin +=  cam.right*dist.x + cam.up*dist.y;
+		segment.ray.direction = glm::normalize(focal - segment.ray.origin); //stupid bug here
 		
 #endif
 	}

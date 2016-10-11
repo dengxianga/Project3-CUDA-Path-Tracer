@@ -4,5 +4,5 @@
 #define CACHEFIRSTBOUNCE 0 //assume stationary scene, toggle off if need motion
 #define ANTIALIAS 0
 #define MOTIONJITTER 0
-#define USEDOF 0
-#define DOTIMING  1
+#define USEDOF 1
+#define DOTIMING  0

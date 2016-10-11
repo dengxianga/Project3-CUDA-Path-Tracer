@@ -74,6 +74,9 @@ Sorting trememdously increases the delay in processing; whereas caching first bo
 * CMakeLists Changes
 
 A couple changed were made, 1. Changed CUDA compatiblity sm_20 --> sm_61; 2. Added file names from stream compaction folder; 3. Adjustments of main cmakelist file 
-for fixing linking errors with Visual Studio 2013, CUDA 8 (see https://groups.google.com/forum/#!topic/cis-565-fall-2016/kMSmwhhdqFg).
+for fixing linking errors with Visual Studio 2013, CUDA 8 (see https://groups.google.com/forum/#!topic/cis-565-fall-2016/kMSmwhhdqFg , also includes the changes to the 
+external folder).
 
-* Togglable parameters, please see common.h.
+* Togglable parameters of modes, please see common.h.
+* Parameters for motion speed, camera DOF, etc, please see cornellMove.txt for reference.
+
