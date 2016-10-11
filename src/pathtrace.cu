@@ -21,16 +21,10 @@
 #include "stream_compaction/common.h"
 #include "stream_compaction/efficient.h"
 
- 
-#define USECOMPATION 1
-#define USETHRUSTCOMPT 0
-#define SORTBYKEY 0 && !USECOMPATION
-#define CACHEFIRSTBOUNCE 0 //assume stationary scene, toggle off if need motion
-#define ANTIALIAS 1
-#define MOTIONJITTER 1
-#define USEDOF 1
+#include <chrono>
+#include "common.h"
 #define FILENAME (strrchr(__FILE__, '/') ? strrchr(__FILE__, '/') + 1 : __FILE__)
- 
+
 
 __host__ __device__
 thrust::default_random_engine makeSeededRandomEngine(int iter, int index, int depth) {
@@ -129,13 +123,21 @@ void pathtraceFree() {
 __device__ glm::vec2 getDistortion(float lambda1, float lambda2)
 {
 	float r; float theta; 
+
+	//float sx = 2 * lambda1 - 1;
+	//float sy = 2 * lambda2 - 1;
+	//if (sx >= -sy){
+	//	if (sx > sy){
+
+	//	}
+	//}
 	if (lambda1 > lambda2){
-		r = lambda2 * 2 - 1;
-		theta = PI / 2 - PI / 4 * (lambda1 * 2 - 1) / (lambda2 * 2 - 1);
+		r = lambda2 * 2.0f - 1.0f;
+		theta = PI / 2.0f - PI / 4.0f * (lambda1 * 2.0f - 1.0f) / (lambda2 * 2.0f - 1.0f);
 	}
 	else{
-		r = (lambda1 * 2 - 1);
-		theta = (lambda2 * 2 - 1) / (lambda1 * 2 - 1)*PI / 4;
+		r = (lambda1 * 2.0f - 1.0f);
+		theta = (lambda2 * 2.0f - 1.0f) / (lambda1 * 2.0f - 1.0f)*PI / 4.0f;
 	}	 
 	return glm::vec2(r*std::cos(theta), r*std::cos(theta));
 }
@@ -354,10 +356,14 @@ __global__ void finalGather(int nPaths, glm::vec3 * image, PathSegment * iterati
 //add path termination bool return
 struct isPathOff{
 	__host__ __device__ bool operator()(const PathSegment & path_seg){
-		return path_seg.isoff();
+		return path_seg.remainingBounces<=0;
 	}
 };
-
+struct isPathOn{
+	__host__ __device__ bool operator()(const PathSegment & path_seg){
+		return path_seg.remainingBounces>0;
+	}
+};
 //get the remaining bounces for streamcompaction
 __global__ void getPathBounces(int n, int *obounces, const PathSegment * paths){
 	int path_index = blockIdx.x * blockDim.x + threadIdx.x;
@@ -387,7 +393,24 @@ __global__ void kernGetMaterialID(int n, int *obuff, const ShadeableIntersection
 * Wrapper for the __global__ call that sets up the kernel calls and does a ton
 * of memory management
 */
+static double timer = 0;
+std::chrono::high_resolution_clock::time_point start;
+static cudaEvent_t start_G, stop_G; float milliseconds = 0; float totalmilliseconds = 0;
 void pathtrace(uchar4 *pbo, int frame, int iter) {
+	if (iter == 1){
+
+		start = std::chrono::high_resolution_clock::now();
+	}
+	else {
+		if ((iter% 100) == 0){
+
+			auto end = std::chrono::high_resolution_clock::now();
+			float milscs = (float)std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+			printf("Time %f \n", totalmilliseconds);
+		}
+	
+	}
+
 	const int traceDepth = hst_scene->state.traceDepth;
 	//printf("traceDepth %d \n", traceDepth);
 	const Camera &cam = hst_scene->state.camera;
@@ -469,12 +492,11 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 	cudaMemcpy(dev_geoms, geoms, hst_scene->geoms.size()*sizeof(Geom), cudaMemcpyHostToDevice);
 	//end motion       /////////////////////////////
 #endif
-
+ 
 	// TODO: perform one iteration of path tracing
 	generateRayFromCamera << <blocksPerGrid2d, blockSize2d >> >(cam, iter, traceDepth, dev_paths);
 	checkCUDAError("generate camera ray failed");
-
-
+ 
 	int depth = 0;
 	PathSegment* dev_path_end = dev_paths + pixelcount;
 	int num_paths = dev_path_end - dev_paths;
@@ -489,7 +511,11 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
 		// clean shading chunks
 		cudaMemset(dev_intersections, 0, pixelcount * sizeof(ShadeableIntersection));
-
+#if DOTIMING
+		cudaEventCreate(&start_G);
+		cudaEventCreate(&stop_G);
+		cudaEventRecord(start_G);
+#endif
 		// tracing
 		dim3 numblocksPathSegmentTracing = (num_paths_on + blockSize1d - 1) / blockSize1d;
 		if ((CACHEFIRSTBOUNCE && ((depth == 0 && iter == 1) || (depth > 0))) || !CACHEFIRSTBOUNCE){
@@ -505,6 +531,14 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 			cudaDeviceSynchronize();
 
 		}
+#if DOTIMING
+		cudaEventRecord(stop_G);
+		cudaEventSynchronize(stop_G);
+		cudaEventElapsedTime(&milliseconds, start_G, stop_G);
+		totalmilliseconds += milliseconds;
+		cudaEventDestroy(start_G);
+		cudaEventDestroy(stop_G);
+#endif
 		if (CACHEFIRSTBOUNCE){
 			if (depth == 0 && iter == 1){
 				cudaMemcpy(dev_intersections_firstbounce, dev_intersections, num_paths_on * sizeof(ShadeableIntersection), cudaMemcpyDeviceToDevice);
@@ -525,6 +559,12 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 		// TODO: compare between directly shading the path segments and shading
 		// path segments that have been reshuffled to be contiguous in memory.
 		int numoffbySort = 0;
+
+#if DOTIMING
+		cudaEventCreate(&start_G);
+		cudaEventCreate(&stop_G);
+		cudaEventRecord(start_G);
+#endif
 #if SORTBYKEY
 		kernGetMaterialID << <numblocksPathSegmentTracing, blockSize1d >> >(num_paths_on, dev_materialID_buff, dev_intersections);
 		cudaMemcpy(dev_materialID_buff2, dev_materialID_buff, num_paths_on*sizeof(int), cudaMemcpyDeviceToDevice);
@@ -533,6 +573,21 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 /*		numoffbySort = thrust::count_if(thrust_dev_path_ptr, thrust_dev_path_ptr + num_paths_on, isPathOff());
 		num_paths_on -= numoffbySort;
 		printf("num_paths_on %d\n", num_paths_on)*/;
+#endif
+
+#if DOTIMING
+		cudaEventRecord(stop_G);
+		cudaEventSynchronize(stop_G);
+		cudaEventElapsedTime(&milliseconds, start_G, stop_G);
+		totalmilliseconds += milliseconds;
+		cudaEventDestroy(start_G);
+		cudaEventDestroy(stop_G);
+#endif
+
+#if DOTIMING
+		cudaEventCreate(&start_G);
+		cudaEventCreate(&stop_G);
+		cudaEventRecord(start_G);
 #endif
 		shadeMaterialAndGather << <numblocksPathSegmentTracing, blockSize1d >> > (
 			depth,
@@ -544,18 +599,41 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 			dev_image
 			);
 
-
-
+#if DOTIMING
+		cudaEventRecord(stop_G);
+		cudaEventSynchronize(stop_G);
+		cudaEventElapsedTime(&milliseconds, start_G, stop_G);
+		totalmilliseconds += milliseconds;
+		cudaEventDestroy(start_G);
+		cudaEventDestroy(stop_G);
+#endif
+#if DOTIMING
+		cudaEventCreate(&start_G);
+		cudaEventCreate(&stop_G);
+		cudaEventRecord(start_G);
+#endif
 #if USECOMPATION
 #if USETHRUSTCOMPT
 		//steam compaction by thrust
+		//PathSegment* thrustend = thrust::partition(thrust::device, dev_paths, dev_paths + num_paths_on, isPathOn());
+		//num_paths_on = std::distance(dev_paths, thrustend);
 		auto thrustend = thrust::remove_if(thrust::device, thrust_dev_path_ptr, thrust_dev_path_ptr + num_paths_on, isPathOff());
 		num_paths_on = thrustend - thrust_dev_path_ptr;
+
+		
 #else
 		num_paths_on = StreamCompaction::Efficient::compactPaths(num_paths_on, dev_paths_buff, dev_indices4compact, dev_bools4compact, dev_paths);
 #endif
+		//printf("num_paths_on %d\n", num_paths_on);
 #endif
-		//printf("%d \n", num_paths_on);
+#if DOTIMING
+		cudaEventRecord(stop_G);
+		cudaEventSynchronize(stop_G);
+		cudaEventElapsedTime(&milliseconds, start_G, stop_G);
+		totalmilliseconds += milliseconds;
+		cudaEventDestroy(start_G);
+		cudaEventDestroy(stop_G);
+#endif		
 		
 		depth++;
 		iterationComplete = depth > traceDepth || num_paths_on <= 0; // DONE: should be based off stream compaction results.
@@ -563,14 +641,25 @@ void pathtrace(uchar4 *pbo, int frame, int iter) {
 
 
 	}
-
+#if DOTIMING
+	cudaEventCreate(&start_G);
+	cudaEventCreate(&stop_G);
+	cudaEventRecord(start_G);
+#endif
 	// Assemble this iteration and apply it to the image
 #if !USECOMPATION
 	dim3 numBlocksPixels = (pixelcount + blockSize1d - 1) / blockSize1d;
 	finalGather<< <numBlocksPixels, blockSize1d >> >(num_paths, dev_image, dev_paths);
 #endif
 	///////////////////////////////////////////////////////////////////////////
-
+#if DOTIMING
+	cudaEventRecord(stop_G);
+	cudaEventSynchronize(stop_G);
+	cudaEventElapsedTime(&milliseconds, start_G, stop_G);
+	totalmilliseconds += milliseconds;
+	cudaEventDestroy(start_G);
+	cudaEventDestroy(stop_G);
+#endif	
 	// Send results to OpenGL buffer for rendering
 	sendImageToPBO << <blocksPerGrid2d, blockSize2d >> >(pbo, cam.resolution, iter, dev_image);
 

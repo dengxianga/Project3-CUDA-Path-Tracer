@@ -22,3 +22,15 @@ project, and we will not be able to grade you without a good README.
 ![](img/AA.gif)
 
 ![](img/noAA.gif)
+
+* Analysis
+
+![](charts/1.png)
+
+![](charts/2.png)
+
+![](charts/3.png)
+
+![](charts/4.png)
+
+![](charts/5.png)
