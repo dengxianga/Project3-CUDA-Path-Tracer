@@ -14,6 +14,7 @@ CUDA Path Tracer
 
 
 * Additional features
+  * Work efficient shared memory compaction.
   * Refractions.
   * Anti-aliasing with uniform guassian spherical jitter.
   * Motion blur.
