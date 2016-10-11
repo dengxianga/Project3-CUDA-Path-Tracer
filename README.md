@@ -80,3 +80,6 @@ external folder).
 * Togglable parameters of modes, please see common.h.
 * Parameters for motion speed, camera DOF, etc, please see cornellMove.txt for reference.
 
+* References
+
+Same as Intructions.md
