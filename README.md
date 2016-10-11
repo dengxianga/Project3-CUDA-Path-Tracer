@@ -24,6 +24,8 @@ CUDA Path Tracer
 
 ![](img/blur3.gif)
 
+![](img/coolblur.png)
+
 * Static scene rendering + basic shading features (reflection + diffusion + refraction)
 
 ![](img/beforeblur.png)
