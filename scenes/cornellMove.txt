@@ -88,7 +88,7 @@ FILE        cornell
 EYE         0.0 5 10.5
 LOOKAT      0 5 0
 UP          0 1 0
-DOFX		5
+DOFX		0
 DOFY		10
 
 
