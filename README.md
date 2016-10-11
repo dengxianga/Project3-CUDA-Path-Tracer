@@ -25,12 +25,12 @@ project, and we will not be able to grade you without a good README.
 
 * Analysis
 
-![](charts/1.png)
+![](charts/1.PNG)
 
-![](charts/2.png)
+![](charts/2.PNG)
 
-![](charts/3.png)
+![](charts/3.PNG)
 
-![](charts/4.png)
+![](charts/4.PNG)
 
-![](charts/5.png)
+![](charts/5.PNG)
