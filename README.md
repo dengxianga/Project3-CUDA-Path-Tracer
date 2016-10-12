@@ -19,28 +19,27 @@ CUDA Path Tracer
   * Anti-aliasing with uniform guassian spherical jitter.
   * Motion blur.
   * Depth of field. 
-  
-* Motion blur + basic shading features (reflection + diffusion + refraction)
 
-![](img/blur3.gif)
 
-* Static scene rendering + basic shading features (reflection + diffusion + refraction)
+Motion blur + basic shading features (reflection + diffusion + refraction)  | Static scene rendering + basic shading features (reflection + diffusion + refraction)
+:-------------------------:|:-------------------------:
+ ![](img/blur3.gif) |  ![](img/beforeblur.png)
 
-![](img/beforeblur.png)
+
+
+
+
 
 * Depth of field
+![](img/DOF1.png) | ![](img/DOF2.png)
 
-![](img/DOF1.png)
 
-![](img/DOF2.png)
 
-* Anti-aliasing
+ Anti-aliasing |  Without-anti-aliasing
+ :-------------------------:|:-------------------------: 
+![](img/AA.gif) | ![](img/noAA.gif)
+ 
 
-![](img/AA.gif)
-
-* Without-anti-aliasing
-
-![](img/noAA.gif)
 
 * Analysis
 
