@@ -31,6 +31,7 @@ Motion blur + basic shading features (reflection + diffusion + refraction) | Blu
 
 
 * Depth of field
+:-------------------------:|:-------------------------:
 ![](img/DOF1.png) | ![](img/DOF2.png)
 
 
