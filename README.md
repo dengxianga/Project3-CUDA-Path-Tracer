@@ -38,6 +38,19 @@ Motion blur + basic shading features (reflection + diffusion + refraction)  | St
  Anti-aliasing |  Without-anti-aliasing
  :-------------------------:|:-------------------------: 
 ![](img/AA.gif) | ![](img/noAA.gif)
+
+
+
+
+
+* Depth of field
+![](img/DOF1.png) | ![](img/DOF2.png)
+
+
+
+ Anti-aliasing |  Without-anti-aliasing
+ :-------------------------:|:-------------------------: 
+![](img/AA.gif) | ![](img/noAA.gif)
  
 
 
