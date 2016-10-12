@@ -21,7 +21,7 @@ CUDA Path Tracer
   * Depth of field. 
 
 
-Motion blur + basic shading features (reflection + diffusion + refraction) |  | Static scene rendering + basic shading features (reflection + diffusion + refraction)
+Motion blur + basic shading features (reflection + diffusion + refraction) | Blur Screen Shot From Differnt Angle | Static scene rendering + basic shading features (reflection + diffusion + refraction)
 :-------------------------:|:-------------------------:
  ![](img/blur3.gif) |![](img/coolblur.png) |  ![](img/beforeblur.png)
 
