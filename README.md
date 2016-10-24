@@ -14,6 +14,8 @@ In this project, we typically explores the development of two major components: 
 
  Static scene rendering + basic shading features (reflection + diffusion + refraction)
  
+  ![](img/stack3.png)
+  
  ![](img/beforeblur.png)
  
 * Features
